@@ -163,25 +163,37 @@ func (v *Processor) Process(
 					thumbnail = true
 				}
 				if thumbnail {
+					size := SizeDown
+					if upscale {
+						size = SizeBoth
+					}
 					if img, err = v.NewThumbnail(
 						ctx, blob, p.Width, p.Height,
-						interest, SizeBoth, maxN,
+						interest, size, maxN,
 					); err != nil {
 						return nil, err
 					}
 				}
 			} else if p.Width > 0 && p.Height == 0 {
+				size := SizeDown
+				if upscale {
+					size = SizeBoth
+				}
 				if img, err = v.NewThumbnail(
 					ctx, blob, p.Width, v.MaxHeight,
-					InterestingNone, SizeBoth, maxN,
+					InterestingNone, size, maxN,
 				); err != nil {
 					return nil, err
 				}
 				thumbnail = true
 			} else if p.Height > 0 && p.Width == 0 {
+				size := SizeDown
+				if upscale {
+					size = SizeBoth
+				}
 				if img, err = v.NewThumbnail(
 					ctx, blob, v.MaxWidth, p.Height,
-					InterestingNone, SizeBoth, maxN,
+					InterestingNone, size, maxN,
 				); err != nil {
 					return nil, err
 				}
@@ -383,6 +395,9 @@ func (v *Processor) process(
 			h = img.PageHeight()
 		}
 	}
+
+	noUpscaleNeeded := !p.FitIn && !stretch && !upscale && (w > img.Width() || h > img.PageHeight())
+
 	if !thumbnail {
 		if p.FitIn {
 			if upscale || w < img.Width() || h < img.PageHeight() {
@@ -398,7 +413,7 @@ func (v *Processor) process(
 					return err
 				}
 			}
-		} else if upscale || w < img.Width() || h < img.PageHeight() {
+		} else if !noUpscaleNeeded && (upscale || w < img.Width() || h < img.PageHeight()) {
 			interest := InterestingCentre
 			if p.Smart {
 				interest = InterestingAttention
@@ -434,6 +449,46 @@ func (v *Processor) process(
 			}
 		}
 	}
+
+	if noUpscaleNeeded {
+		interest := InterestingCentre
+		if p.Smart {
+			interest = InterestingAttention
+		} else if float64(w)/float64(h) > float64(img.Width())/float64(img.PageHeight()) {
+			if p.VAlign == imagorpath.VAlignTop {
+				interest = InterestingLow
+			} else if p.VAlign == imagorpath.VAlignBottom {
+				interest = InterestingHigh
+			}
+		} else {
+			if p.HAlign == imagorpath.HAlignLeft {
+				interest = InterestingLow
+			} else if p.HAlign == imagorpath.HAlignRight {
+				interest = InterestingHigh
+			}
+		}
+
+		if float64(w)/float64(h) > float64(img.Width())/float64(img.PageHeight()) {
+			h = img.Width() * h / w
+			w = img.Width()
+		} else {
+			w = img.PageHeight() * w / h
+			h = img.PageHeight()
+		}
+
+		if v.Debug {
+			v.Logger.Debug("no_upscale filter size", zap.Int("w", w), zap.Int("h", h))
+		}
+
+		if err := v.Thumbnail(img, w, h, interest, SizeDown); err != nil {
+			return err
+		}
+		if _, err := v.CheckResolution(img, nil); err != nil {
+			return err
+		}
+
+	}
+
 	if p.HFlip {
 		if err := img.Flip(DirectionHorizontal); err != nil {
 			return err
