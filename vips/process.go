@@ -386,12 +386,12 @@ func (v *Processor) process(
 		h = img.PageHeight()
 	} else if w == 0 {
 		w = img.Width() * h / img.PageHeight()
-		if !upscale && w > img.Width() {
+		if p.FitIn && !upscale && w > img.Width() {
 			w = img.Width()
 		}
 	} else if h == 0 {
 		h = img.PageHeight() * w / img.Width()
-		if !upscale && h > img.PageHeight() {
+		if p.FitIn && !upscale && h > img.PageHeight() {
 			h = img.PageHeight()
 		}
 	}
